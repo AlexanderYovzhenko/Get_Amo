@@ -33,7 +33,7 @@ export class AppService {
   private async getTokens() {
     const response = await firstValueFrom(
       this.httpService
-        .post(await this.configService.get('AMO_URL_GET_TOKENS'), {
+        .post(await this.configService.get('AMO_URL_TOKENS'), {
           client_id: await this.configService.get('AMO_ID_INTEGRATION'),
           client_secret: await this.configService.get('AMO_SECRET_KEY'),
           grant_type: 'authorization_code',
@@ -53,11 +53,9 @@ export class AppService {
   }
 
   private async updateTokens() {
-    console.log(this.refresh_token);
-
     const response = await firstValueFrom(
       this.httpService
-        .post(await this.configService.get('AMO_URL_GET_TOKENS'), {
+        .post(await this.configService.get('AMO_URL_TOKENS'), {
           client_id: await this.configService.get('AMO_ID_INTEGRATION'),
           client_secret: await this.configService.get('AMO_SECRET_KEY'),
           grant_type: 'refresh_token',

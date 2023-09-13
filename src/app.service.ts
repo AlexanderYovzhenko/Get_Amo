@@ -3,43 +3,190 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { AxiosError } from 'axios';
 import { catchError, firstValueFrom } from 'rxjs';
-import { Tokens } from './types/interfaces';
+import { QueryParams, Tokens } from './types/interfaces';
 
 @Injectable()
 export class AppService {
-  access_token: string;
+  access_token =
+    'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjhiMzU4OTM0YjQ2ZGE0NmY0YzQ0M2MxNjMwNjgwOWM5OWVkNDI4ZTExOGQwYWY5YWI3NDMwZTAxYTZlZTg0MGZkMTZiNDZiMWUxZTAxODQyIn0.eyJhdWQiOiJkNDI1YmYxNy01NzExLTQyN2ItYjJhYi1mZWI0NGE0M2VjMjQiLCJqdGkiOiI4YjM1ODkzNGI0NmRhNDZmNGM0NDNjMTYzMDY4MDljOTllZDQyOGUxMThkMGFmOWFiNzQzMGUwMWE2ZWU4NDBmZDE2YjQ2YjFlMWUwMTg0MiIsImlhdCI6MTY5NDUzODY2MywibmJmIjoxNjk0NTM4NjYzLCJleHAiOjE2OTQ2MjUwNjMsInN1YiI6IjEwMDc3NTY2IiwiZ3JhbnRfdHlwZSI6IiIsImFjY291bnRfaWQiOjMxMjkwNDA2LCJiYXNlX2RvbWFpbiI6ImFtb2NybS5ydSIsInZlcnNpb24iOiJ2MiIsInNjb3BlcyI6WyJwdXNoX25vdGlmaWNhdGlvbnMiLCJmaWxlcyIsImNybSIsImZpbGVzX2RlbGV0ZSIsIm5vdGlmaWNhdGlvbnMiXX0.KCY4sUuCvOBzrNRmiWYNWs5K58_r6pE638wDrJ4g-4UDleV9bAZFiBlCjK5bGok7PjDCkzko_X7AbWcIGvKRexyy9Jvd3mNsr1ynWVUzWmxqokaqcWDrzb7RtnQWWi2YDnZVlYQ1WsmmPr9dA5X_jpfOYtd0SmHxaMRCbnv9AwKRTB_roHWYNO-Ze79TuWP3ZSsntOmr7G-V4ny2VvIZSfGknW1m8cWemFa78Me6dd77q2FgVLeDuHOcKBy6hUzogLI0q8qPA67h6mPtxqA22iamiGYGvtbz_ta7qo_nK2qoQ5NSpZjS0flpP78tLi7H4lmLZEVlA_SMsunLFFAJgw';
   refresh_token: string;
-  expires_in: number;
-  token_type: string;
+  expires_in = 2222222222222222;
+  token_type = 'Bearer';
 
   constructor(
     private readonly httpService: HttpService,
     private configService: ConfigService,
   ) {}
 
-  async makeDeal() {
+  async makeDeal(queryParams: QueryParams) {
+    const { email, phone } = queryParams;
+
     if (!this.access_token) {
       await this.getTokens();
-    } else {
+    }
+
+    if (Date.now() > this.expires_in) {
       await this.updateTokens();
     }
 
-    return {
-      access_token: this.access_token,
-      refresh_token: this.refresh_token,
-    };
+    const contact = await this.getContact(email, phone);
+
+    if (contact) {
+      const id = contact?._embedded?.contacts[0]?.id;
+      await this.updateContact(queryParams, id);
+    } else {
+      await this.createContact(queryParams);
+    }
+
+    return contact;
   }
 
+  // Methods for contacts
+  private async getContact(email: string, phone: string) {
+    let contact = null;
+    contact = await this.getContactByEmailOrPhone(email, 'email');
+
+    if (!contact) {
+      contact = await this.getContactByEmailOrPhone(phone, 'phone');
+    }
+
+    return contact;
+  }
+
+  private async getContactByEmailOrPhone(
+    searchValue: string,
+    searchField: string,
+  ) {
+    const response = await firstValueFrom(
+      this.httpService
+        .get((await this.configService.get('AMO_URL')) + '/api/v4/contacts', {
+          params: {
+            query: searchValue,
+            search: searchField,
+          },
+          headers: {
+            Authorization: `${this.token_type} ${this.access_token}`,
+          },
+        })
+        .pipe(
+          catchError((error: AxiosError) => {
+            throw new Error(JSON.stringify(error.response.data));
+          }),
+        ),
+    );
+
+    return response.data;
+  }
+
+  private async createContact(queryParams: QueryParams) {
+    const response = await firstValueFrom(
+      this.httpService
+        .post(
+          (await this.configService.get('AMO_URL')) + '/api/v4/contacts',
+          [
+            {
+              name: queryParams.name,
+              custom_fields_values: [
+                {
+                  field_id: 2197135,
+                  values: [
+                    {
+                      value: queryParams.email,
+                    },
+                  ],
+                },
+                {
+                  field_id: 2197133,
+                  values: [
+                    {
+                      value: queryParams.phone,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `${this.token_type} ${this.access_token}`,
+            },
+          },
+        )
+        .pipe(
+          catchError((error: AxiosError) => {
+            throw new Error(JSON.stringify(error.response.data));
+          }),
+        ),
+    );
+
+    console.info('Create contact');
+
+    return response.data;
+  }
+
+  private async updateContact(queryParams: QueryParams, id: number) {
+    const response = await firstValueFrom(
+      this.httpService
+        .patch(
+          (await this.configService.get('AMO_URL')) + '/api/v4/contacts',
+          [
+            {
+              id,
+              name: queryParams.name,
+              custom_fields_values: [
+                {
+                  field_id: 2197135,
+                  values: [
+                    {
+                      value: queryParams.email,
+                    },
+                  ],
+                },
+                {
+                  field_id: 2197133,
+                  values: [
+                    {
+                      value: queryParams.phone,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `${this.token_type} ${this.access_token}`,
+            },
+          },
+        )
+        .pipe(
+          catchError((error: AxiosError) => {
+            throw new Error(JSON.stringify(error.response.data));
+          }),
+        ),
+    );
+
+    console.info('Update contact');
+
+    return response.data;
+  }
+
+  // Methods for tokens
   private async getTokens() {
     const response = await firstValueFrom(
       this.httpService
-        .post(await this.configService.get('AMO_URL_TOKENS'), {
-          client_id: await this.configService.get('AMO_ID_INTEGRATION'),
-          client_secret: await this.configService.get('AMO_SECRET_KEY'),
-          grant_type: 'authorization_code',
-          code: await this.configService.get('AMO_CODE'),
-          redirect_uri: await this.configService.get('NGROK_URL_APP'),
-        })
+        .post(
+          (await this.configService.get('AMO_URL')) + '/oauth2/access_token',
+          {
+            client_id: await this.configService.get('AMO_ID_INTEGRATION'),
+            client_secret: await this.configService.get('AMO_SECRET_KEY'),
+            grant_type: 'authorization_code',
+            code: await this.configService.get('AMO_CODE'),
+            redirect_uri: await this.configService.get('APP_URL'),
+          },
+        )
         .pipe(
           catchError((error: AxiosError) => {
             throw new Error(JSON.stringify(error.response.data));
@@ -55,13 +202,16 @@ export class AppService {
   private async updateTokens() {
     const response = await firstValueFrom(
       this.httpService
-        .post(await this.configService.get('AMO_URL_TOKENS'), {
-          client_id: await this.configService.get('AMO_ID_INTEGRATION'),
-          client_secret: await this.configService.get('AMO_SECRET_KEY'),
-          grant_type: 'refresh_token',
-          refresh_token: this.refresh_token,
-          redirect_uri: await this.configService.get('NGROK_URL_APP'),
-        })
+        .post(
+          (await this.configService.get('AMO_URL')) + '/oauth2/access_token',
+          {
+            client_id: await this.configService.get('AMO_ID_INTEGRATION'),
+            client_secret: await this.configService.get('AMO_SECRET_KEY'),
+            grant_type: 'refresh_token',
+            refresh_token: this.refresh_token,
+            redirect_uri: await this.configService.get('APP_URL'),
+          },
+        )
         .pipe(
           catchError((error: AxiosError) => {
             throw new Error(JSON.stringify(error.response.data));
@@ -77,7 +227,7 @@ export class AppService {
   private async saveTokens(tokens: Tokens) {
     this.access_token = tokens.access_token;
     this.refresh_token = tokens.refresh_token;
-    this.expires_in = tokens.expires_in;
+    this.expires_in = Date.now() + tokens.expires_in;
     this.token_type = tokens.token_type;
 
     return;

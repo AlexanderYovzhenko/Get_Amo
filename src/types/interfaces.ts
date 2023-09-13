@@ -1,3 +1,8 @@
+interface QueryParams {
+  name: string;
+  email: string;
+  phone: string;
+}
 interface Tokens {
   access_token: string;
   refresh_token: string;
@@ -5,4 +10,4 @@ interface Tokens {
   token_type: string;
 }
 
-export { Tokens };
+export { QueryParams, Tokens };

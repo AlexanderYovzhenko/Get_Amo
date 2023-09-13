@@ -4,6 +4,11 @@ import { HttpService } from '@nestjs/axios';
 import { AxiosError } from 'axios';
 import { catchError, firstValueFrom } from 'rxjs';
 import { QueryParams, Tokens } from './types/interfaces';
+import {
+  DEAL_STATUS_ONE_ID,
+  FIELD_ID_EMAIL,
+  FIELD_ID_PHONE,
+} from './common/constants/constants';
 
 @Injectable()
 export class AppService {
@@ -21,6 +26,7 @@ export class AppService {
   async makeDeal(queryParams: QueryParams) {
     const { email, phone } = queryParams;
 
+    // Проверяем, получаем или обновляем токены
     if (!this.access_token) {
       await this.getTokens();
     }
@@ -29,16 +35,58 @@ export class AppService {
       await this.updateTokens();
     }
 
-    const contact = await this.getContact(email, phone);
+    // Получаем, создаём или обновляем контакт
+    let contacts = await this.getContact(email, phone);
 
-    if (contact) {
-      const id = contact?._embedded?.contacts[0]?.id;
+    if (contacts) {
+      const id = contacts?._embedded?.contacts[0]?.id;
       await this.updateContact(queryParams, id);
     } else {
-      await this.createContact(queryParams);
+      contacts = await this.createContact(queryParams);
     }
 
-    return contact;
+    const contact = contacts?._embedded?.contacts[0];
+
+    // Создаём сделку
+    const deal = await this.createDeal(contact?.id);
+
+    return deal;
+  }
+
+  // Methods for deals
+  private async createDeal(id: number) {
+    const response = await firstValueFrom(
+      this.httpService
+        .post(
+          (await this.configService.get('AMO_URL')) + '/api/v4/leads',
+          [
+            {
+              name: 'deal',
+              status_id: DEAL_STATUS_ONE_ID,
+              _embedded: {
+                contacts: [
+                  {
+                    id,
+                  },
+                ],
+              },
+            },
+          ],
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `${this.token_type} ${this.access_token}`,
+            },
+          },
+        )
+        .pipe(
+          catchError((error: AxiosError) => {
+            throw new Error(JSON.stringify(error.response.data));
+          }),
+        ),
+    );
+
+    return response.data;
   }
 
   // Methods for contacts
@@ -88,7 +136,7 @@ export class AppService {
               name: queryParams.name,
               custom_fields_values: [
                 {
-                  field_id: 2197135,
+                  field_id: FIELD_ID_EMAIL,
                   values: [
                     {
                       value: queryParams.email,
@@ -96,7 +144,7 @@ export class AppService {
                   ],
                 },
                 {
-                  field_id: 2197133,
+                  field_id: FIELD_ID_PHONE,
                   values: [
                     {
                       value: queryParams.phone,
@@ -136,7 +184,7 @@ export class AppService {
               name: queryParams.name,
               custom_fields_values: [
                 {
-                  field_id: 2197135,
+                  field_id: FIELD_ID_EMAIL,
                   values: [
                     {
                       value: queryParams.email,
@@ -144,7 +192,7 @@ export class AppService {
                   ],
                 },
                 {
-                  field_id: 2197133,
+                  field_id: FIELD_ID_PHONE,
                   values: [
                     {
                       value: queryParams.phone,

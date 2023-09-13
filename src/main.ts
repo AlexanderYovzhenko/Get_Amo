@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
-import configuration from './config/configuration';
+import configuration from './common/config/configuration';
 
 const PORT = configuration().PORT;
 const APP_URL = configuration().APP_URL;

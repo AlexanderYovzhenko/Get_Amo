@@ -1,5 +1,8 @@
 import { IsString, IsNotEmpty } from 'class-validator';
-import { SHOULD_BE_REQUIRED, SHOULD_BE_STRING } from 'src/common/constants';
+import {
+  SHOULD_BE_REQUIRED,
+  SHOULD_BE_STRING,
+} from 'src/common/constants/messages';
 
 class MakeDealQueryDto {
   @IsNotEmpty({ message: SHOULD_BE_REQUIRED })

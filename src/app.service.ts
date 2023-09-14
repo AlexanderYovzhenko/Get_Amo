@@ -243,6 +243,8 @@ export class AppService {
 
     await this.saveTokens(response.data);
 
+    console.info('Get tokens');
+
     return response;
   }
 
@@ -267,6 +269,8 @@ export class AppService {
     );
 
     await this.saveTokens(response.data);
+
+    console.info('Update tokens');
 
     return response;
   }
